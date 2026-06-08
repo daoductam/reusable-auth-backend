@@ -87,72 +87,118 @@
 
 ## 🏛️ Architecture
 
-### High-Level Architecture Diagram
+### High-Level Architecture Diagram - Request Flow
 
 ```mermaid
 graph TB
-    Client["📱 Client Application"]
-    Gateway["🚪 API Gateway"]
-    SecFilter["🔐 Security Filter"]
-    AuthCtrl["📡 Auth Controller"]
-    UserCtrl["👤 User Controller"]
-    AuthSvc["🔑 Auth Service"]
-    UserSvc["👥 User Service"]
-    JwtSvc["🎫 JWT Service"]
-    CookieSvc["🍪 Cookie Service"]
-    UserRepo["💾 User Repository"]
-    RoleRepo["💾 Role Repository"]
-    RefreshRepo["💾 Refresh Token Repository"]
-    DB[(🗄️ MySQL Database)]
-    Cache["📦 Cache Layer"]
+    subgraph Client_Layer["👥 Client Layer"]
+        Client["📱 Client App"]
+    end
     
-    Client -->|HTTP Request| Gateway
-    Gateway -->|Filter Chain| SecFilter
-    SecFilter -->|Validate JWT| JwtSvc
+    subgraph API_Layer["🌐 API Layer"]
+        SecurityFilter["🔐 Security Filter"]
+        AuthController["📡 Auth Controller"]
+        UserController["👤 User Controller"]
+    end
     
-    Gateway -->|POST /login| AuthCtrl
-    Gateway -->|POST /register| AuthCtrl
-    Gateway -->|GET /users| UserCtrl
+    subgraph Business_Layer["⚙️ Business Logic"]
+        JwtService["🎫 JWT Service"]
+        AuthService["🔑 Auth Service"]
+        UserService["👥 User Service"]
+    end
     
-    AuthCtrl -->|authenticate| AuthSvc
-    AuthCtrl -->|generateTokens| JwtSvc
-    AuthCtrl -->|saveRefresh| RefreshRepo
-    AuthCtrl -->|attachCookie| CookieSvc
+    subgraph Data_Layer["💾 Data Access"]
+        UserRepository["📊 User Repository"]
+        RefreshTokenRepository["📊 RefreshToken Repo"]
+    end
     
-    UserCtrl -->|findUser| UserSvc
-    UserSvc -->|query| UserRepo
+    subgraph Database_Layer["🗄️ Storage"]
+        Database[(MySQL DB)]
+    end
     
-    UserRepo -->|persist| DB
-    RoleRepo -->|persist| DB
-    RefreshRepo -->|persist| DB
+    Client -->|1. HTTP Request| SecurityFilter
+    SecurityFilter -->|2. Validate JWT| JwtService
     
-    JwtSvc -.->|cache config| Cache
+    SecurityFilter -->|3. Route Request| AuthController
+    SecurityFilter -->|3. Route Request| UserController
     
-    DB -->|return entities| UserRepo
+    AuthController -->|4. Auth Logic| AuthService
+    UserController -->|4. User Logic| UserService
+    
+    AuthService -->|5. Query/Persist| UserRepository
+    UserService -->|5. Query/Persist| UserRepository
+    AuthService -->|5. Create Token| RefreshTokenRepository
+    
+    UserRepository -->|6. DB Operations| Database
+    RefreshTokenRepository -->|6. DB Operations| Database
+    
+    Database -->|7. Return Data| UserRepository
+    UserRepository -->|8. Send Response| AuthService
+    AuthService -->|9. HTTP Response| Client
     
     style Client fill:#e1f5ff
-    style Gateway fill:#fff3e0
-    style SecFilter fill:#fce4ec
-    style DB fill:#f3e5f5
-    style JwtSvc fill:#c8e6c9
-    style Cache fill:#ffe0b2
+    style SecurityFilter fill:#fce4ec
+    style Database fill:#f3e5f5
+    style JwtService fill:#c8e6c9
+```
+
+### High-Level Architecture Diagram - Component Interaction
+
+```mermaid
+graph LR
+    subgraph Presentation["📞 Presentation"]
+        AC["Auth Controller"]
+        UC["User Controller"]
+    end
+    
+    subgraph Application["🎯 Business Logic"]
+        AS["Auth Service"]
+        US["User Service"]
+        JS["JWT Service"]
+    end
+    
+    subgraph Persistence["💾 Data Access"]
+        UR["User Repository"]
+        RR["Role Repository"]
+        TR["Token Repository"]
+    end
+    
+    subgraph Database["🗄️ Database"]
+        DB["MySQL<br/>User | Role | Token"]
+    end
+    
+    AC --> AS
+    UC --> US
+    AS --> JS
+    AS --> UR
+    US --> UR
+    US --> RR
+    AS --> TR
+    
+    UR --> DB
+    RR --> DB
+    TR --> DB
+    
+    style AC fill:#bbdefb
+    style AS fill:#c8e6c9
+    style UR fill:#ffe0b2
+    style DB fill:#f8bbd0
 ```
 
 ### Layer Architecture
 
 ```mermaid
 graph LR
-    A["📞 Presentation Layer<br/>Controllers"]
-    B["🎯 Application Layer<br/>Services"]
-    C["💾 Persistence Layer<br/>Repositories"]
-    D["🗄️ Data Layer<br/>Database"]
-    E["🔒 Security Layer<br/>JWT & Auth"]
+    A["📞 Controllers"]
+    B["🎯 Services"]
+    C["💾 Repositories"]
+    D["🗄️ Database"]
+    E["🔒 Security<br/>JWT & Auth"]
     
     A -->|calls| B
     B -->|uses| C
     C -->|CRUD| D
-    E -.->|validates| A
-    E -.->|secures| B
+    E -->|validates| A
     
     style A fill:#bbdefb
     style B fill:#c8e6c9
@@ -169,30 +215,23 @@ graph LR
 
 ```mermaid
 erDiagram
-    USER ||--o{ ROLE : has
-    USER ||--o{ REFRESH_TOKEN : owns
-    ROLE ||--o{ USER : "assigned to"
+    USER ||--o{ ROLE : "has many"
+    USER ||--o{ REFRESH_TOKEN : "owns"
     
     USER {
         string user_id PK
         string user_email UK
         string user_name
         string password
-        string image
         boolean enable
+        string provider
         timestamp createdAt
         timestamp updatedAt
-        string provider
     }
     
     ROLE {
         string role_id PK
         string name UK
-    }
-    
-    USER_ROLES {
-        string user_id FK
-        string role_id FK
     }
     
     REFRESH_TOKEN {
@@ -780,19 +819,21 @@ Content-Type: application/json
 
 ```mermaid
 graph LR
-    A["Plain Password"]
-    B["BCrypt Algorithm"]
-    C["Salt Generation"]
-    D["Hash Generation"]
-    E["Stored in Database"]
+    A["🔓 Plain Password"]
+    B["🔐 BCrypt"]
+    C["Salt"]
+    D["🔒 Hashed"]
+    E["💾 Database"]
     
     A -->|input| B
-    C -->|10 rounds| B
-    B -->|produces| D
-    D -->|persisted| E
+    C -->|salt| B
+    B -->|10 rounds| D
+    D -->|store| E
     
+    style A fill:#ffcdd2
     style B fill:#e57373
-    style E fill:#81c784
+    style D fill:#81c784
+    style E fill:#4db6ac
 ```
 
 **Implementation:**
@@ -806,28 +847,15 @@ Password Encoding: UTF-8
 ### 2. JWT Token Structure
 
 ```mermaid
-graph TB
-    A["JWT Token"]
-    B["Header"]
-    C["Payload"]
-    D["Signature"]
+graph LR
+    A["🎫 JWT Token"]
+    B["Header<br/>type: JWT<br/>algo: HS256"]
+    C["Payload<br/>sub, email<br/>roles, exp"]
+    D["Signature<br/>HMACSHA256"]
     
-    A -->|consists of| B
-    A -->|consists of| C
-    A -->|consists of| D
-    
-    B -->|type: JWT|B1
-    B -->|algorithm: HS256|B2
-    
-    C -->|sub: userId|C1
-    C -->|email: user_email|C2
-    C -->|roles: role_list|C3
-    C -->|exp: expiration|C4
-    C -->|iat: issuedAt|C5
-    C -->|jti: tokenId|C6
-    
-    D -->|HMACSHA256|D1
-    D -->|secret_key|D2
+    A -->|Part 1| B
+    A -->|Part 2| C
+    A -->|Part 3| D
     
     style A fill:#fff9c4
     style B fill:#c5e1a5
@@ -856,32 +884,28 @@ graph TB
 
 ```mermaid
 graph TD
-    A["Incoming Request"]
-    B{"Has Authorization<br/>Header?"}
-    C{"Valid JWT<br/>Signature?"}
+    A["🔍 Incoming Request"]
+    B{"Authorization<br/>Header?"}
+    C{"JWT Valid<br/>Signature?"}
     D{"Token<br/>Expired?"}
-    E{"User<br/>Enabled?"}
-    F["Load User Roles"]
-    G["Create Security Context"]
-    H["Allow Request"]
-    I["Deny - 401 Unauthorized"]
-    J["Deny - 403 Forbidden"]
+    E{"User<br/>Active?"}
+    F["✅ Authorized"]
+    G["❌ 401 Unauthorized"]
+    H["❌ 403 Forbidden"]
     
     A --> B
-    B -->|No| I
+    B -->|No| G
     B -->|Yes| C
-    C -->|No| I
+    C -->|No| G
     C -->|Yes| D
-    D -->|Yes| I
+    D -->|Yes| G
     D -->|No| E
-    E -->|No| J
+    E -->|No| H
     E -->|Yes| F
-    F --> G
-    G --> H
     
-    style H fill:#81c784
-    style I fill:#e57373
-    style J fill:#ffb74d
+    style F fill:#81c784
+    style G fill:#e57373
+    style H fill:#ffb74d
 ```
 
 ### 4. Security Headers
