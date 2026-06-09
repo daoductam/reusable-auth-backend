@@ -46,11 +46,13 @@ public class SecurityConfig {
                         auth -> auth
                                 .requestMatchers("/api/v1/auth/register").permitAll()
                                 .requestMatchers("/api/v1/auth/login").permitAll()
+                                .requestMatchers("/api/v1/auth/refresh").permitAll()
+                                .requestMatchers("/api/v1/auth/logout").permitAll()
                                 .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(
                         ((request, response, authException) -> {
-                            authException.printStackTrace();
+//                            authException.printStackTrace();
                             response.setStatus(401);
                             response.setContentType("application/json");
                             String message ="Unauthorized Access !! "+authException.getMessage();

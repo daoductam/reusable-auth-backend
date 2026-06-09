@@ -1157,20 +1157,18 @@ JWT_ALGORITHM=HS256
 # Run all tests
 mvn test
 
-# Run specific test class
-mvn test -Dtest=AuthControllerTest
-
-# Run with coverage
-mvn clean test jacoco:report
+# Run the complete Authentication API Integration Test
+mvn test -Dtest=AuthControllerIntegrationTest
 ```
 
-### Test Coverage
+### Integration Tests Details
 
-```
-Unit Tests: Service, Repository
-Integration Tests: Controller, Security
-Coverage Target: > 80%
-```
+**`AuthControllerIntegrationTest`** covers the entire authentication lifecycle including:
+1. **User Registration (`/register`)**: Verifies password encoding, user creation, and response formatting.
+2. **User Login (`/login`)**: Performs credentials validation, issues JWT Access and Refresh Tokens, and sets the secure `HttpOnly` cookie.
+3. **Token Refresh (`/refresh`)**: Refreshes tokens using cookie authentication, verifies token rotation (prevents reuse of old refresh tokens).
+4. **User Logout (`/logout`)**: Clears the cookie and marks the token as revoked in the database.
+5. **Replay Attack Prevention**: Ensures revoked or replayed refresh tokens return an authorization error.
 
 ---
 
